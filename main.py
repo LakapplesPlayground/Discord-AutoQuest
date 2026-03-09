@@ -123,7 +123,8 @@ def filter_completed_quests(quests: list) -> list:
     incomplete_quests = []
 
     for quest in quests:
-        if quest["user_status"] is None:
+        if quest["user_status"] is None \
+        or quest["user_status"]["completed_at"] is None:
             incomplete_quests.append(quest)
     
     return incomplete_quests
@@ -172,16 +173,7 @@ class DiscordSession:
         return data.get("quests", None)
     
 
-def process_token(token: str, build_number: int):
-    log(f"Initializing session for token: {token[:4]}...{token[-4:]}")
-    
-    try:
-        session = DiscordSession(token, build_number)
-    except ValueError as e:
-        log(str(e), LogLevel.ERROR)
-        log(f"Skipping token: {token[:4]}...{token[-4:]}", LogLevel.WARNING)
-        return
-    
+def init_quests(session: DiscordSession):
     available_quests = session.fetch_all_quests()
     available_quests = filter_expired_quests(available_quests)
     available_quests = filter_completed_quests(available_quests)
@@ -195,6 +187,20 @@ def process_token(token: str, build_number: int):
 
 
 
+def init_session(token: str, build_number: int):
+    log(f"Initializing session for token: {token[:4]}...{token[-4:]}")
+    
+    try:
+        session = DiscordSession(token, build_number)
+    except ValueError as e:
+        log(str(e), LogLevel.ERROR)
+        log(f"Skipping token: {token[:4]}...{token[-4:]}", LogLevel.WARNING)
+        return
+    
+    init_quests(session)
+    
+
+
 if __name__ == "__main__":
     latest_build_number = fetch_latest_build_number()
 
@@ -205,4 +211,4 @@ if __name__ == "__main__":
     token_list = os.environ.get("TOKENS").split(",")
 
     for token in token_list:
-        process_token(token.strip(), latest_build_number)
+        init_session(token.strip(), latest_build_number)
