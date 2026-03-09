@@ -173,19 +173,6 @@ class DiscordSession:
         return data.get("quests", None)
     
 
-def init_quests(session: DiscordSession):
-    available_quests = session.fetch_all_quests()
-    available_quests = filter_expired_quests(available_quests)
-    available_quests = filter_completed_quests(available_quests)
-
-    if not DO_NON_ORB_QUESTS:
-        available_quests = filter_non_orb_quests(available_quests)
-
-    pprint(available_quests)
-
-    log(f"Available quests for token {token[:4]}...{token[-4:]}: {len(available_quests)}", LogLevel.INFO)
-
-
 
 def init_session(token: str, build_number: int):
     log(f"Initializing session for token: {token[:4]}...{token[-4:]}")
@@ -197,7 +184,14 @@ def init_session(token: str, build_number: int):
         log(f"Skipping token: {token[:4]}...{token[-4:]}", LogLevel.WARNING)
         return
     
-    init_quests(session)
+    available_quests = session.fetch_all_quests()
+    available_quests = filter_expired_quests(available_quests)
+    available_quests = filter_completed_quests(available_quests)
+
+    if not DO_NON_ORB_QUESTS:
+        available_quests = filter_non_orb_quests(available_quests)
+
+    log(f"Available quests for token {token[:4]}...{token[-4:]}: {len(available_quests)}", LogLevel.INFO)    
     
 
 
