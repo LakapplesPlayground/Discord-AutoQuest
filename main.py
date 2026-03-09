@@ -5,7 +5,8 @@ import os
 import json
 import base64
 
-from enum import StrEnum, auto
+from pprint import pprint
+from enum import Enum, StrEnum, auto
 from typing import Optional
 
 
@@ -91,6 +92,43 @@ def generate_super_properties(build_number: int) -> str:
     return super_properties_b64
 
 
+def filter_expired_quests(quests: list) -> list:
+    available_quests = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    for quest in quests:
+        expires_at_str = quest["config"]["expires_at"]
+        
+        expires_at = datetime.datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+
+        if expires_at > now:
+            available_quests.append(quest)
+    
+    return available_quests
+
+
+def filter_non_orb_quests(quests: list) -> list:
+    orb_quests = []
+
+    for quest in quests:
+        for reward in quest["config"]["rewards_config"]["rewards"]:
+            if reward["type"] == 4: # Orb reward type
+                orb_quests.append(quest)
+                break
+    
+    return orb_quests
+
+
+def filter_completed_quests(quests: list) -> list:
+    incomplete_quests = []
+
+    for quest in quests:
+        if quest["user_status"] is None:
+            incomplete_quests.append(quest)
+    
+    return incomplete_quests
+
+
 class DiscordSession:
     def __init__(self, token: str, build_number: int) -> None:
         self.token = token
@@ -117,11 +155,44 @@ class DiscordSession:
         r = self.session.get(f"{BASE_API}/users/@me")
 
         if r.status_code == 200:
-            log("Token is valid")
+            log(f"Token {self.token[:4]}...{self.token[-4:]} is valid")
             return True
         else:
-            log(f"Token validation failed: {r.status_code} - {r.text}", LogLevel.ERROR)
+            log(f"Token {self.token[:4]}...{self.token[-4:]} validation failed: {r.status_code} - {r.text}", LogLevel.ERROR)
             return False
+        
+    def fetch_all_quests(self) -> Optional[list]:
+        r = self.session.get(f"{BASE_API}/quests/@me")
+
+        if r.status_code != 200:
+            log(f"Failed to fetch quests: {r.status_code} - {r.text}", LogLevel.ERROR)
+            return None
+        
+        data = r.json()
+        return data.get("quests", None)
+    
+
+def process_token(token: str, build_number: int):
+    log(f"Initializing session for token: {token[:4]}...{token[-4:]}")
+    
+    try:
+        session = DiscordSession(token, build_number)
+    except ValueError as e:
+        log(str(e), LogLevel.ERROR)
+        log(f"Skipping token: {token[:4]}...{token[-4:]}", LogLevel.WARNING)
+        return
+    
+    available_quests = session.fetch_all_quests()
+    available_quests = filter_expired_quests(available_quests)
+    available_quests = filter_completed_quests(available_quests)
+
+    if not DO_NON_ORB_QUESTS:
+        available_quests = filter_non_orb_quests(available_quests)
+
+    pprint(available_quests)
+
+    log(f"Available quests for token {token[:4]}...{token[-4:]}: {len(available_quests)}", LogLevel.INFO)
+
 
 
 if __name__ == "__main__":
@@ -134,16 +205,4 @@ if __name__ == "__main__":
     token_list = os.environ.get("TOKENS").split(",")
 
     for token in token_list:
-        print(f"Initializing session for token: {token[:4]}...{token[-4:]}")
-        
-        try:
-            session = DiscordSession(token, latest_build_number)
-        except ValueError as e:
-            log(str(e), LogLevel.ERROR)
-            log(f"Skipping token: {token[:4]}...{token[-4:]}", LogLevel.WARNING)
-            continue
-
-
-
-    
-
+        process_token(token.strip(), latest_build_number)
